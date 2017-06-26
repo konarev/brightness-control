@@ -1,48 +1,66 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 
 from gi.repository import Gtk
 import subprocess
 
-class BrightnessScale:
-    def __init__(self):
-        # get active monitor and current brightness
-        self.monitor = self.getActiveMonitor()
-        self.currB = self.getCurrentBrightness()
-        
-    def initUI(self):
-        # initliaze and configure window 
-        window = Gtk.Window()
-        window.set_title('Brightness Scale')
-        window.set_default_size(250, 50)
-        window.set_position(Gtk.WindowPosition.CENTER)
-        window.set_border_width(10)
-        
-        # slider configuration
-        self.adjustment = Gtk.Adjustment(self.currB, 0, 100, 1, 10, 0)
-        self.scale = Gtk.HScale()
-        self.scale.set_adjustment(self.adjustment)
-        self.scale.set_digits(0)
-        
-        # close Gtk thread on closing window
-        window.connect("destroy", lambda w: Gtk.main_quit())
 
-        # setup event handler on value-changed
-        self.scale.connect("value-changed", self.scale_moved)
-        
-        # add the scale to window
-        window.add(self.scale)
+class BrightnessScale:
+
+    def __init__(self):
+        # get monitor list
+        self.monitors = self.getMonitorList()
+
+    def destroy(self, widget, data=None):
+        Gtk.main_quit()
+
+    def initUI(self):
+        # initliaze and configure window
+        window = Gtk.Window()
+        # close Gtk thread on closing window
+        window.connect("destroy", self.destroy)
+        # window.connect("focus-out-event", lambda w: Gtk.main_quit())
+        window.connect("focus-out-event", self.destroy)
+        window.set_title('Brightness Scale')
+        window.set_default_size(250, 50*len(self.monitors))
+        window.set_position(Gtk.WindowPosition.CENTER)
+
+        window.set_border_width(10)
+        # disable taskbar hint
+        window.set_skip_taskbar_hint(True)
+
+        vbox = Gtk.VBox()
+        window.add(vbox)
+
+        # slider configuration
+        adjustment = range(len(self.monitors))
+        self._scale = range(len(self.monitors))
+        currB = self.getCurrentBrightness()
+        for n_monitor in range(len(self.monitors)):
+            label = Gtk.Label(self.monitors[n_monitor])
+            vbox.pack_start(label, False)
+
+
+            adjustment[n_monitor] = Gtk.Adjustment(currB[n_monitor], 0, 100, 1, 10, 0)
+            self._scale[n_monitor] = Gtk.HScale()
+            self._scale[n_monitor].set_adjustment(adjustment[n_monitor])
+            self._scale[n_monitor].set_digits(0)
+
+            # setup event handler on value-changed
+            self._scale[n_monitor].connect("value-changed", self._scale_moved, n_monitor)
+            # add the scale to window
+            vbox.pack_start(self._scale[n_monitor], False)
 
         # show all components in window
         window.show_all()
-        
+
         # close window on pressing escape key
         accGroup = Gtk.AccelGroup()
         key, modifier = Gtk.accelerator_parse('Escape')
         accGroup.connect(key, modifier, Gtk.AccelFlags.VISIBLE, Gtk.main_quit)
         window.add_accel_group(accGroup)
-        
+
     def showErrDialog(self):
-        self.errDialog = Gtk.MessageDialog(None, 
+        self.errDialog = Gtk.MessageDialog(None,
                                            Gtk.DialogFlags.MODAL,
                                            Gtk.MessageType.ERROR,
                                            Gtk.ButtonsType.OK,
@@ -51,33 +69,31 @@ class BrightnessScale:
         self.errDialog.run()
         self.errDialog.destroy()
 
-    def initStatus(self):
-        if(self.monitor == "" or self.currB == ""):
-            return False
-        return True
-        
-    def getActiveMonitor(self):
-        #Find display monitor
-        monitor = subprocess.check_output("xrandr -q | grep ' connected' | cut -d ' ' -f1", shell=True)
-        if(monitor != ""):
-            monitor = monitor.split('\n')[0]
+        monitor = monitor.split('\n')
+        monitor.pop()
         return monitor
 
     def getCurrentBrightness(self):
-        #Find current brightness
+        # Find current brightness
         currB = subprocess.check_output("xrandr --verbose | grep -i brightness | cut -f2 -d ' '", shell=True)
-        if(currB != ""):
-            currB = currB.split('\n')[0]
-            currB = int(float(currB) * 100)
-        else:
-            currB = ""
+        currB = currB.split('\n')
+        currB.pop()
+        for n in range(len(currB)):
+            currB[n] = int(float(currB[n]) * 100)
         return currB
 
-    def scale_moved(self, event):
-        #Change brightness
-        newBrightness = float(self.scale.get_value())/100
-        cmd = "xrandr --output %s --brightness %.2f" % (self.monitor, newBrightness)
-        cmdStatus = subprocess.check_output(cmd, shell=True)
+    def _scale_moved(self, event, n_monitor):
+        # Change brightness
+        newBrightness = float(self._scale[n_monitor].get_value())/100
+        cmd = "xrandr --output %s --brightness %.2f" % (self.monitors[n_monitor], newBrightness)
+        subprocess.check_output(cmd, shell=True)
+
+orig_pack_start = Gtk.Box.pack_start
+
+
+def pack_start(self, child, expand=True, fill=True, padding=0):
+    orig_pack_start(self, child, expand, fill, padding)
+Gtk.Box.pack_start = pack_start
 
 if __name__ == "__main__":
     # new instance of BrightnessScale
